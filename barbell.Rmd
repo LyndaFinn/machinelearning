@@ -1,0 +1,91 @@
+---
+title: "Machine Learning to Predict which Weight Lifting Exercise is Being Performed"
+author: "LyndaFinn"
+date: "Thursday, October 23, 2014"
+output: html_document
+---
+##Data Processing
+Load the data, add the necessary libraries, select columns for modeling
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf
+```{r}
+## Add necessary libraries
+
+library(AppliedPredictiveModeling)
+library(caret)
+library(ggplot2)
+library(randomForest)
+
+## Read Data from web
+y <- read.csv(url("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+
+## remove non-numeric variables and variables with missing values
+## thes variables vary very little or are predominantly missing
+nums <- sapply(y, is.numeric)
+miss <- sapply(y,function(x) any(is.na(x)))
+cols <- nums & !miss
+
+##include classe (response variable)
+cols[160]<-TRUE
+
+## also remove case number and time stamp and num window
+cols[1:7]<-FALSE
+
+## subset data to only important predictor columns and the response
+suby<-y[,cols]
+```
+## Model Fitting
+Use Random Tree Model on Remaining Explanatory Variables. Random Forests are good at prediction and tend not to overfit, while still giving some insight into what are the important factors
+```{r}
+## partition data to training and testing
+set.seed(666)
+inTrain<-createDataPartition(suby$classe, p = 3/4)[[1]]
+training<-suby[ inTrain,]
+testing<-suby[-inTrain,]
+
+## Fit Random Forest model to training set
+modelFit<-randomForest(training$classe ~ ., data=training, importance = TRUE)
+print(modelFit)
+
+## Evaluate Model Perfomance on Testing Data
+confusionMatrix(testing$classe,predict(modelFit,testing))
+```
+
+## Model Interpretation
+Model evaluation shows good accuracy. The out of sample error rate is .49% which is quite low. It is obtained within the Random Forest Algorithm through cross-validation, and matches closely the accuracy obtained from the testing sample ( 99.7%).
+
+Next, Use Random Tree tools to determine most influential factors. Plot response against some of these factors
+```{r}
+varImpPlot(modelFit)
+
+qplot(yaw_belt,roll_belt,colour=classe,data=training)
+qplot(magnet_dumbbell_z,pitch_belt,colour=classe,data=training)
+```
+
+Clearly the top four variables do help to visually cluster the response. The coding for A-E is as follows: 
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: 
+
+* A: exactly according to the specification
+* B: throwing the elbows to the front
+* C: lifting the dumbbell only halfway 
+* D: lowering the dumbbell only halfway
+* E: throwing the hips to the front
+
+## Generate Answer files
+```{r}
+tt<- read.csv(url("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+subtt<-tt[,cols]
+answers<-predict(modelFit,tt)
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(answers)
+```
+
+
